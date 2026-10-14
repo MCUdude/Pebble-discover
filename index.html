@@ -72,7 +72,7 @@ header.hide{transform:translateY(-100%)}
 <script>
 const API = "https://appstore-api.repebble.com/api/v1/apps/collection/all/";
 const TYPES = [["watchfaces","face"],["watchapps-and-companions","app"]];
-const CK = "pebble-discover-v1", TTL = 6*3600e3, PAGE = 72;
+const CK = "pebble-discover-v2", TTL = 6*3600e3, PAGE = 72;
 let apps = [], shown = PAGE;
 const $ = id => document.getElementById(id);
 const st = {type:"face", sort:"trend", cat:"", nat:true, q:""};
@@ -81,14 +81,37 @@ const st = {type:"face", sort:"trend", cat:"", nat:true, q:""};
 const oidDate = id => /^[0-9a-f]{24}$/.test(id||"") ? parseInt(id.slice(0,8),16)*1000 : 0;
 const toMs = v => { const t = v ? Date.parse(v) : NaN; return isNaN(t) ? 0 : t; };
 
+// Every thumbnail the store record offers, best first. The card tries them in order and
+// moves on when one is missing or fails to load (see the error listener below render()).
+function images(a, hp){
+  const out = [];
+  const add = v => {
+    if(!v) return;
+    if(typeof v === "object"){ Object.values(v).forEach(add); return; }
+    if(typeof v !== "string" || !/^(https?:)?\/\//.test(v)) return;
+    v = v.replace(/^http:\/\//, "https://");   // http images are blocked on an https page
+    if(!out.includes(v)) out.push(v);
+  };
+  const li = a.list_image || {};
+  add(li["144x144"]); add(li["80x80"]); add(li);
+  const plat = hp.find(p => p.name === "emery") || hp.find(p => p.name === "basalt") || hp[0];
+  const pi = (plat && plat.images) || {};
+  add(pi.list); add(pi.icon);
+  add(a.icon_image && (a.icon_image["48x48"] || a.icon_image));
+  add(pi.screenshot);                    // watchfaces often only have screenshots
+  add(a.screenshot_images);
+  hp.forEach(p => p.images && add([p.images.list, p.images.icon, p.images.screenshot]));
+  add(a.header_images);
+  return out;
+}
+
 function slim(a){
   const r = a.latest_release || {}, hp = a.hardware_platforms || [];
   const native = hp.some(p => p.name === "emery") || (hp.length === 0 && false);
-  const img = (a.list_image && (a.list_image["144x144"] || a.list_image["80x80"] || Object.values(a.list_image)[0]))
-    || (hp[0] && hp[0].images && (hp[0].images.icon || hp[0].images.list)) || "";
+  const imgs = images(a, hp);
   return {
     id:a.id, t:a.title||"Untitled", au:a.author||"", h:a.hearts||0, k:a.type==="watchface"?"face":"app", c:a.category||"",
-    img, n:native, v:r.version||"",
+    imgs, n:native, v:r.version||"",
     up: toMs(a.published_date||a.created_at||a.createdAt) || oidDate(a.id),
     ud: toMs(r.published_date||r.created_at||r.createdAt) || oidDate(r.id) || oidDate(a.id)
   };
@@ -178,13 +201,21 @@ function render(){
     (!r.length && !loading ? "Nothing matches. Try clearing the search or turning off the Made for PT2 filter." : "");
   $("grid").innerHTML = r.slice(0, shown).map(a => `
     <div class="card"><a class="cm" href="https://apps.repebble.com/${slug(a.t)}_${a.id}" target="_blank" rel="noopener">
-      <img class="ic" loading="lazy" alt="" src="${esc(a.img)}">
+      <img class="ic" loading="lazy" alt="" src="${esc(a.imgs[0]||"")}" data-fb="${esc(a.imgs.slice(1).join(" "))}">
       <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
         <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
       </div></a><a class="app" href="pebble://appstore/${a.id}?source=https%3A%2F%2Fappstore-api.repebble.com%2Fapi">Open in Pebble app</a></div>`).join("");
   $("more").hidden = r.length <= shown;
   requestAnimationFrame(fill);
 }
+// When a thumbnail fails, try the next candidate; when none are left, show the plain tile.
+document.addEventListener("error", e => {
+  const im = e.target;
+  if(!(im instanceof HTMLImageElement) || !im.classList.contains("ic")) return;
+  const [next, ...rest] = (im.dataset.fb || "").split(" ").filter(Boolean);
+  im.dataset.fb = rest.join(" ");
+  if(next) im.src = next; else im.removeAttribute("src");
+}, true);
 function fill(){ const m = $("more"); if(!m.hidden && m.getBoundingClientRect().top < innerHeight+800){ shown += PAGE; render(); } }
 addEventListener("scroll", fill, {passive:true});
 // Slide the header away when scrolling down, bring it back when scrolling up.
