@@ -41,21 +41,6 @@ main{padding:18px 20px 60px;max-width:1280px;margin:0 auto}
 #more{display:block;margin:22px auto 0;cursor:pointer;padding:9px 22px}
 @media (prefers-reduced-motion:no-preference){.card{transition:border-color .15s}header{transition:transform .22s ease}}
 header.hide{transform:translateY(-100%)}
-.app .s{display:none}
-@media (max-width:700px){
-  header{padding:8px 12px 8px}
-  h1{margin:0 0 6px;font-size:18px}
-  .bar{gap:6px}
-  input,select,button{padding:6px 9px}
-  main{padding:10px 12px 50px}
-  #status{margin:0 0 8px}
-  #grid{grid-template-columns:1fr;gap:8px}
-  .card{flex-direction:row;align-items:center;gap:10px;padding:8px 10px}
-  .cm{flex:1;min-width:0;gap:10px}
-  .app{align-self:center;flex:none;padding:6px 9px;font-size:12px}
-  .app .l{display:none}.app .s{display:inline}
-  .m{margin-top:3px;font-size:12px}
-}
 </style>
 </head>
 <body>
@@ -196,7 +181,7 @@ function render(){
       <img class="ic" loading="lazy" alt="" src="${esc(a.img)}">
       <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
         <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
-      </div></a><a class="app" title="Open in Pebble app" href="pebble://appstore/${a.id}"><span class="l">Open in Pebble app</span><span class="s">Open in app</span></a></div>`).join("");
+      </div></a><a class="app" href="pebble://appstore/${a.id}">Open in Pebble app</a></div>`).join("");
   $("more").hidden = r.length <= shown;
   requestAnimationFrame(fill);
 }
