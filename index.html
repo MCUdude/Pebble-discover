@@ -93,7 +93,8 @@ function slim(a){
 let seen = new Set(), loading = false, tmr = 0;
 async function page(type, off){
   const u = `${API}${type}?hardware=emery&limit=100&offset=${off}&sort=hearts`;
-  const res = await fetch(u); if(!res.ok) throw new Error(`${res.status} from ${u}`);
+  const res = await fetch(u);
+  if(!res.ok){ if(off > 0) return []; throw new Error(`${res.status} from ${u}`); }
   return (await res.json()).data || [];
 }
 const sched = () => { if(!tmr) tmr = setTimeout(() => { tmr = 0; init(); }, 500); };
@@ -118,7 +119,7 @@ async function load(force){
   }
   apps = []; seen = new Set(); loading = true; shown = PAGE; init();
   let err = null;
-  try{ await Promise.all(TYPES.map(t => stream(t))); }catch(e){ err = e; }
+  try{ await Promise.all(TYPES.map(([t]) => stream(t))); }catch(e){ err = e; }
   loading = false;
   if(err){
     if(!apps.length){
