@@ -181,7 +181,7 @@ function render(){
       <img class="ic" loading="lazy" alt="" src="${esc(a.img)}">
       <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
         <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
-      </div></a><a class="app" href="pebble://appstore/${a.id}">Open in Pebble app</a></div>`).join("");
+      </div></a><a class="app" href="pebble://appstore/${a.id}?source=https%3A%2F%2Fappstore-api.repebble.com%2Fapi">Open in Pebble app</a></div>`).join("");
   $("more").hidden = r.length <= shown;
   requestAnimationFrame(fill);
 }
