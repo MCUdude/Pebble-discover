@@ -4,6 +4,11 @@ An alternative way to browse the [Pebble app store](https://apps.repebble.com), 
 
 This is an unofficial project and isn't affiliated with Pebble or Rebble.
 
+**Give it a try here:**
+
+**[https://MCUdude.github.io/Pebble-discover](https://MCUdude.github.io/Pebble-discover/)**
+
+
 ## Features
 
 - Separate **Watchfaces** and **Apps** tabs
