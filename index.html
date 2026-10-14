@@ -24,8 +24,11 @@ label.chk{display:flex;gap:7px;align-items:center;cursor:pointer;user-select:non
 main{padding:18px 20px 60px;max-width:1280px;margin:0 auto}
 #status{color:var(--mute);margin:0 0 14px;min-height:1.4em}
 #grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
-a.card{display:flex;gap:12px;padding:12px;background:var(--surf);border:1px solid var(--line);border-radius:10px;color:inherit;text-decoration:none;box-shadow:0 1px 2px var(--sh)}
-a.card:hover{border-color:var(--acc)}
+.card{display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--surf);border:1px solid var(--line);border-radius:10px;color:inherit;text-decoration:none;box-shadow:0 1px 2px var(--sh)}
+.card:hover{border-color:var(--acc)}
+.cm{display:flex;gap:12px;color:inherit;text-decoration:none}
+.app{display:none;align-self:flex-start;font-size:13px;font-weight:650;color:var(--acc);text-decoration:none;border:1px solid var(--acc);border-radius:8px;padding:5px 11px}
+@media (hover:none) and (pointer:coarse){.app{display:inline-block}}
 .ic{width:64px;height:64px;flex:none;border-radius:8px;background:var(--line);object-fit:cover;image-rendering:auto}
 .tx{min-width:0;flex:1}
 .t{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -36,7 +39,7 @@ a.card:hover{border-color:var(--acc)}
 .err{background:var(--surf);border:1px solid var(--heart);border-radius:10px;padding:14px;margin-bottom:14px}
 #more[hidden]{display:none}
 #more{display:block;margin:22px auto 0;cursor:pointer;padding:9px 22px}
-@media (prefers-reduced-motion:no-preference){a.card{transition:border-color .15s}}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .15s}}
 </style>
 </head>
 <body>
@@ -173,11 +176,11 @@ function render(){
   $("status").textContent = (loading ? `Still loading… ${apps.length.toLocaleString()} found so far, order may shift. ` : "") +
     (!r.length && !loading ? "Nothing matches. Try clearing the search or turning off the Made for PT2 filter." : "");
   $("grid").innerHTML = r.slice(0, shown).map(a => `
-    <a class="card" href="https://apps.repebble.com/${slug(a.t)}_${a.id}" target="_blank" rel="noopener">
+    <div class="card"><a class="cm" href="https://apps.repebble.com/${slug(a.t)}_${a.id}" target="_blank" rel="noopener">
       <img class="ic" loading="lazy" alt="" src="${esc(a.img)}">
       <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
         <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
-      </div></a>`).join("");
+      </div></a><a class="app" href="pebble://appstore/${a.id}">Open in Pebble app</a></div>`).join("");
   $("more").hidden = r.length <= shown;
   requestAnimationFrame(fill);
 }
