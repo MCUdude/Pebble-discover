@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pebble Discover</title>
+<style>
+:root{--bg:#e8ece4;--surf:#f6f8f2;--ink:#1b2220;--mute:#5d6862;--line:#cfd6c9;--acc:#0b7a75;--heart:#d9480f;--sh:rgba(27,34,32,.08)}
+@media (prefers-color-scheme:dark){:root{--bg:#121617;--surf:#1a2022;--ink:#e6ebe7;--mute:#92a09a;--line:#2b3436;--acc:#4fc9c0;--heart:#ff8a5c;--sh:rgba(0,0,0,.3)}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Avenir Next","Segoe UI",system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:14px 20px 12px}
+h1{margin:0 0 10px;font-size:22px;letter-spacing:-.02em}
+h1 a{color:inherit;text-decoration:none}
+h1 small{font-weight:400;color:var(--mute);font-size:14px;margin-left:8px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input,select,button{font:inherit;color:var(--ink);background:var(--surf);border:1px solid var(--line);border-radius:8px;padding:7px 11px}
+input[type=search]{flex:1 1 200px;min-width:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:var(--surf);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--ink);color:var(--bg)}
+label.chk{display:flex;gap:7px;align-items:center;cursor:pointer;user-select:none}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+main{padding:18px 20px 60px;max-width:1280px;margin:0 auto}
+#status{color:var(--mute);margin:0 0 14px;min-height:1.4em}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+a.card{display:flex;gap:12px;padding:12px;background:var(--surf);border:1px solid var(--line);border-radius:10px;color:inherit;text-decoration:none;box-shadow:0 1px 2px var(--sh)}
+a.card:hover{border-color:var(--acc)}
+.ic{width:64px;height:64px;flex:none;border-radius:8px;background:var(--line);object-fit:cover;image-rendering:auto}
+.tx{min-width:0;flex:1}
+.t{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.a{color:var(--mute);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:6px;font-size:12.5px;color:var(--mute)}
+.m b{color:var(--heart);font-weight:650}
+.nat{color:var(--acc);font-weight:650}
+.err{background:var(--surf);border:1px solid var(--heart);border-radius:10px;padding:14px;margin-bottom:14px}
+#more[hidden]{display:none}
+#more{display:block;margin:22px auto 0;cursor:pointer;padding:9px 22px}
+@media (prefers-reduced-motion:no-preference){a.card{transition:border-color .15s}}
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#" id="home">Pebble Discover</a><small id="count"></small></h1>
+  <div class="bar">
+    <input type="search" id="q" autocomplete="off" placeholder="Search title or author" aria-label="Search">
+    <div class="seg" id="type" role="group" aria-label="Type">
+      <button data-v="face" aria-pressed="true">Watchfaces</button>
+      <button data-v="app" aria-pressed="false">Apps</button>
+    </div>
+    <select id="sort" aria-label="Sort by">
+      <option value="trend">Trending</option>
+      <option value="likes">Most liked</option>
+      <option value="new">Newest uploads</option>
+      <option value="upd">Recently updated</option>
+      <option value="az">A to Z</option>
+    </select>
+    <select id="cat" aria-label="Category" hidden><option value="">All categories</option></select>
+    <label class="chk"><input type="checkbox" id="nat" checked autocomplete="off"> Made for PT2</label>
+    <button id="reload" title="Fetch the latest data from the store">Refresh</button>
+  </div>
+</header>
+<main>
+  <p id="status" role="status"></p>
+  <div id="grid"></div>
+  <button id="more" hidden>Show more</button>
+</main>
+<script>
+const API = "https://appstore-api.repebble.com/api/v1/apps/collection/all/";
+const TYPES = [["watchfaces","face"],["watchapps-and-companions","app"]];
+const CK = "pebble-discover-v1", TTL = 6*3600e3, PAGE = 72;
+let apps = [], shown = PAGE;
+const $ = id => document.getElementById(id);
+const st = {type:"face", sort:"trend", cat:"", nat:true, q:""};
+
+// Mongo ObjectIds start with a unix timestamp: a fallback for upload / update dates.
+const oidDate = id => /^[0-9a-f]{24}$/.test(id||"") ? parseInt(id.slice(0,8),16)*1000 : 0;
+const toMs = v => { const t = v ? Date.parse(v) : NaN; return isNaN(t) ? 0 : t; };
+
+function slim(a){
+  const r = a.latest_release || {}, hp = a.hardware_platforms || [];
+  const native = hp.some(p => p.name === "emery") || (hp.length === 0 && false);
+  const img = (a.list_image && (a.list_image["144x144"] || a.list_image["80x80"] || Object.values(a.list_image)[0]))
+    || (hp[0] && hp[0].images && (hp[0].images.icon || hp[0].images.list)) || "";
+  return {
+    id:a.id, t:a.title||"Untitled", au:a.author||"", h:a.hearts||0, k:a.type==="watchface"?"face":"app", c:a.category||"",
+    img, n:native, v:r.version||"",
+    up: toMs(a.published_date||a.created_at||a.createdAt) || oidDate(a.id),
+    ud: toMs(r.published_date||r.created_at||r.createdAt) || oidDate(r.id) || oidDate(a.id)
+  };
+}
+
+let seen = new Set(), loading = false, tmr = 0;
+async function page(type, off){
+  const u = `${API}${type}?hardware=emery&limit=100&offset=${off}&sort=hearts`;
+  const res = await fetch(u); if(!res.ok) throw new Error(`${res.status} from ${u}`);
+  return (await res.json()).data || [];
+}
+const sched = () => { if(!tmr) tmr = setTimeout(() => { tmr = 0; init(); }, 500); };
+async function stream(type){
+  for(let off = 0;; off += 400){
+    const pages = await Promise.all([0,100,200,300].map(i => page(type, off+i)));
+    let last = false;
+    pages.forEach(d => {
+      d.forEach(a => { if(!seen.has(a.id)){ seen.add(a.id); apps.push(slim(a)); } });
+      if(d.length < 100) last = true;
+    });
+    sched();
+    if(last) break;
+  }
+}
+async function load(force){
+  if(!force){
+    try{
+      const c = JSON.parse(localStorage.getItem(CK)||"null");
+      if(c && Date.now()-c.at < TTL){ apps = c.apps; init(); return; }
+    }catch(e){}
+  }
+  apps = []; seen = new Set(); loading = true; shown = PAGE; init();
+  let err = null;
+  try{ await Promise.all(TYPES.map(t => stream(t))); }catch(e){ err = e; }
+  loading = false;
+  if(err){
+    if(!apps.length){
+      $("status").textContent = "";
+      $("grid").innerHTML = `<div class="err"><b>Couldn't load the store.</b><br>${esc(err.message)}<br>
+        If this says "Failed to fetch", the API probably blocks requests from this page's origin (CORS).
+        Run this file with a local server (<code>python3 -m http.server</code>) or a CORS-unblocking extension.</div>`;
+      return;
+    }
+    init(); $("status").textContent = "Loading stopped early: " + err.message; return;
+  }
+  try{ localStorage.setItem(CK, JSON.stringify({at:Date.now(), apps})); }catch(e){}
+  init();
+}
+function fillCats(){
+  $("cat").hidden = st.type === "face";
+  if(st.type === "face"){ st.cat = ""; return; }
+  const cats = [...new Set(apps.filter(a => st.type==="all" || a.k===st.type).map(a => a.c).filter(c => c && !["Index","GetSomeApps"].includes(c)))].sort();
+  if(st.cat && !cats.includes(st.cat)) st.cat = "";
+  $("cat").innerHTML = '<option value="">All categories</option>' +
+    cats.map(c => `<option${c===st.cat?" selected":""}>${esc(c)}</option>`).join("");
+}
+function init(){ fillCats(); render(); }
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+function ago(ms){
+  if(!ms) return "date unknown";
+  const d = (Date.now()-ms)/864e5;
+  if(d < 1) return "today"; if(d < 30) return Math.floor(d)+"d ago";
+  if(d < 365) return Math.floor(d/30)+"mo ago";
+  const y = d/365; return (y<2? y.toFixed(1): Math.floor(y))+"y ago";
+}
+// Trending: likes, discounted by age of upload, with a bonus for fresh updates.
+const trend = a => {
+  const age = Math.max(1,(Date.now()-(a.up||a.ud))/864e5), since = Math.max(1,(Date.now()-a.ud)/864e5);
+  return (a.h+1) / Math.pow(age/30+2, .8) * (1 + 30/(since+30));
+};
+const sorters = {
+  trend:(a,b)=>trend(b)-trend(a), likes:(a,b)=>b.h-a.h, new:(a,b)=>b.up-a.up,
+  upd:(a,b)=>b.ud-a.ud, az:(a,b)=>a.t.localeCompare(b.t)
+};
+
+function render(){
+  const q = st.q.toLowerCase();
+  let r = apps.filter(a =>
+    (st.type==="all"||a.k===st.type) && (!st.cat||a.c===st.cat) && (!st.nat||a.n) &&
+    (!q || a.t.toLowerCase().includes(q) || a.au.toLowerCase().includes(q)));
+  r.sort(sorters[st.sort]);
+  $("count").textContent = `${r.length.toLocaleString()} of ${apps.length.toLocaleString()}`;
+  $("status").textContent = (loading ? `Still loading… ${apps.length.toLocaleString()} found so far, order may shift. ` : "") +
+    (!r.length && !loading ? "Nothing matches. Try clearing the search or turning off the Made for PT2 filter." : "");
+  $("grid").innerHTML = r.slice(0, shown).map(a => `
+    <a class="card" href="https://apps.repebble.com/${slug(a.t)}_${a.id}" target="_blank" rel="noopener">
+      <img class="ic" loading="lazy" alt="" src="${esc(a.img)}">
+      <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
+        <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
+      </div></a>`).join("");
+  $("more").hidden = r.length <= shown;
+  requestAnimationFrame(fill);
+}
+function fill(){ const m = $("more"); if(!m.hidden && m.getBoundingClientRect().top < innerHeight+800){ shown += PAGE; render(); } }
+addEventListener("scroll", fill, {passive:true});
+
+$("q").oninput = e => { st.q = e.target.value; shown = PAGE; render(); };
+$("sort").onchange = e => { st.sort = e.target.value; shown = PAGE; render(); };
+$("cat").onchange = e => { st.cat = e.target.value; shown = PAGE; render(); };
+$("nat").onchange = e => { st.nat = e.target.checked; shown = PAGE; render(); };
+$("more").onclick = () => { shown += PAGE; render(); };
+$("reload").onclick = () => { shown = PAGE; load(true); };
+$("type").onclick = e => {
+  const b = e.target.closest("button"); if(!b) return;
+  st.type = b.dataset.v; shown = PAGE;
+  document.querySelectorAll("#type button").forEach(x => x.setAttribute("aria-pressed", x===b));
+  fillCats(); render();
+};
+$("home").onclick = e => { e.preventDefault(); history.replaceState(null,"",location.pathname+location.search); location.reload(); };
+$("nat").checked = true;
+load(false);
+</script>
+</body>
+</html>
