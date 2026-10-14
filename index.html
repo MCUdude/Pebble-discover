@@ -30,6 +30,7 @@ main{padding:18px 20px 60px;max-width:1280px;margin:0 auto}
 .app{display:none;align-self:flex-start;font-size:13px;font-weight:650;color:var(--acc);text-decoration:none;border:1px solid var(--acc);border-radius:8px;padding:5px 11px}
 @media (hover:none) and (pointer:coarse){.app{display:inline-block}}
 .ic{width:64px;height:64px;flex:none;border-radius:8px;background:var(--line);object-fit:cover;image-rendering:auto}
+img.ic[src*=".gif"]{visibility:hidden}
 .tx{min-width:0;flex:1}
 .t{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .a{color:var(--mute);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -72,7 +73,7 @@ header.hide{transform:translateY(-100%)}
 <script>
 const API = "https://appstore-api.repebble.com/api/v1/apps/collection/all/";
 const TYPES = [["watchfaces","face"],["watchapps-and-companions","app"]];
-const CK = "pebble-discover-v2", TTL = 6*3600e3, PAGE = 72;
+const CK = "pebble-discover-v3", TTL = 6*3600e3, PAGE = 72;
 let apps = [], shown = PAGE;
 const $ = id => document.getElementById(id);
 const st = {type:"face", sort:"trend", cat:"", nat:true, q:""};
@@ -102,7 +103,9 @@ function images(a, hp){
   add(a.screenshot_images);
   hp.forEach(p => p.images && add([p.images.list, p.images.icon, p.images.screenshot]));
   add(a.header_images);
-  return out;
+  // Prefer still images; animated GIFs go last and are frozen to their first frame when shown.
+  const isGif = u => /\.gif(\?|$)/i.test(u);
+  return [...out.filter(u => !isGif(u)), ...out.filter(isGif)];
 }
 
 function slim(a){
@@ -215,6 +218,17 @@ document.addEventListener("error", e => {
   const [next, ...rest] = (im.dataset.fb || "").split(" ").filter(Boolean);
   im.dataset.fb = rest.join(" ");
   if(next) im.src = next; else im.removeAttribute("src");
+}, true);
+// Swap a loaded GIF for a canvas holding its first frame, cropped like object-fit: cover.
+// Displaying a canvas needs no CORS; only reading its pixels would.
+document.addEventListener("load", e => {
+  const im = e.target;
+  if(!(im instanceof HTMLImageElement) || !im.classList.contains("ic") || !/\.gif(\?|$)/i.test(im.src)) return;
+  const w = im.naturalWidth, h = im.naturalHeight; if(!w || !h) return;
+  const S = 128, cv = document.createElement("canvas"), sc = Math.max(S/w, S/h);
+  cv.width = cv.height = S; cv.className = "ic";
+  cv.getContext("2d").drawImage(im, (S - w*sc)/2, (S - h*sc)/2, w*sc, h*sc);
+  im.replaceWith(cv);
 }, true);
 function fill(){ const m = $("more"); if(!m.hidden && m.getBoundingClientRect().top < innerHeight+800){ shown += PAGE; render(); } }
 addEventListener("scroll", fill, {passive:true});
