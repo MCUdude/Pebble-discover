@@ -22,13 +22,6 @@ score = (likes + 1) / (months since upload + 2) ^ 0.8 * (1 + 30 / (days since la
 
 Newer items with decent likes rank above older ones with the same likes, and recently updated items get a boost.
 
-## Hosting on GitHub Pages
-
-1. Put `index.html` and this `README.md` in a GitHub repository.
-2. Go to **Settings > Pages**.
-3. Under **Build and deployment**, choose **Deploy from a branch**, pick your main branch and the `/ (root)` folder, then save.
-4. After a minute or so the site is live at `https://<your-username>.github.io/<repo-name>/`.
-
 ## Notes
 
 - The page fetches data directly from the public Pebble app store API in each visitor's browser, so it needs no server. If the API doesn't allow requests from your Pages domain (a CORS restriction), the page will show an error saying so.
