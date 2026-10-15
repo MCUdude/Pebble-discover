@@ -53,7 +53,7 @@ header.hide{transform:translateY(-100%)}
 <header>
   <h1><a href="#" id="home">Pebble Discover</a><small id="count"></small></h1>
   <div class="bar">
-    <span class="qw"><input type="search" id="q" autocomplete="off" placeholder="Search title or author" aria-label="Search"><button type="button" class="clr" id="clr" aria-label="Clear search" hidden>&times;</button></span>
+    <span class="qw"><input type="search" id="q" autocomplete="off" placeholder="Search title, author or description" aria-label="Search"><button type="button" class="clr" id="clr" aria-label="Clear search" hidden>&times;</button></span>
     <div class="seg" id="type" role="group" aria-label="Type">
       <button data-v="face" aria-pressed="true">Watchfaces</button>
       <button data-v="app" aria-pressed="false">Apps</button>
@@ -78,7 +78,7 @@ header.hide{transform:translateY(-100%)}
 <script>
 const API = "https://appstore-api.repebble.com/api/v1/apps/collection/all/";
 const TYPES = [["watchfaces","face"],["watchapps-and-companions","app"]];
-const CK = "pebble-discover-v3", TTL = 6*3600e3, PAGE = 72;
+const CK = "pebble-discover-v4", TTL = 6*3600e3, PAGE = 72;
 let apps = [], shown = PAGE;
 const $ = id => document.getElementById(id);
 const st = {type:"face", sort:"trend", cat:"", nat:true, q:""};
@@ -113,6 +113,19 @@ function images(a, hp){
   return [...out.filter(u => !isGif(u)), ...out.filter(isGif)];
 }
 
+// Description as a compact list of unique words, so search can use it without
+// bloating the localStorage cache. Words already in the title are left out.
+function words(text, title){
+  const split = x => String(x||"").toLowerCase().split(/[^\p{L}\p{N}]+/u);
+  const seen = new Set(split(title)), out = [];
+  for(const w of split(text)){
+    if(w.length < 3 || seen.has(w)) continue;
+    seen.add(w); out.push(w);
+    if(out.length >= 80) break;
+  }
+  return out.join(" ");
+}
+
 function slim(a){
   const r = a.latest_release || {}, hp = a.hardware_platforms || [];
   const native = hp.some(p => p.name === "emery") || (hp.length === 0 && false);
@@ -120,6 +133,7 @@ function slim(a){
   return {
     id:a.id, t:a.title||"Untitled", au:a.author||"", h:a.hearts||0, k:a.type==="watchface"?"face":"app", c:a.category||"",
     imgs, n:native, v:r.version||"",
+    d: words(a.description || (hp.find(p => p.description) || {}).description, a.title),
     up: toMs(a.published_date||a.created_at||a.createdAt) || oidDate(a.id),
     ud: toMs(r.published_date||r.created_at||r.createdAt) || oidDate(r.id) || oidDate(a.id)
   };
@@ -199,11 +213,25 @@ const sorters = {
 };
 
 function render(){
-  const q = st.q.toLowerCase();
-  let r = apps.filter(a =>
-    (st.type==="all"||a.k===st.type) && (!st.cat||a.c===st.cat) && (!st.nat||a.n) &&
-    (!q || a.t.toLowerCase().includes(q) || a.au.toLowerCase().includes(q)));
-  r.sort(sorters[st.sort]);
+  // Every search word must appear somewhere. Title hits weigh 3, author 2, description 1;
+  // results are ordered by that score first, then by the chosen sort.
+  const terms = st.q.toLowerCase().split(/\s+/).filter(Boolean);
+  const score = new Map(), descOnly = new Set();
+  let r = apps.filter(a => {
+    if(!((st.type==="all"||a.k===st.type) && (!st.cat||a.c===st.cat) && (!st.nat||a.n))) return false;
+    if(!terms.length) return true;
+    const t = a.t.toLowerCase(), au = a.au.toLowerCase(), d = a.d || "";
+    let sc = 0;
+    for(const w of terms){
+      const p = t.includes(w) ? 3 : au.includes(w) ? 2 : d.includes(w) ? 1 : 0;
+      if(!p) return false;
+      sc += p;
+    }
+    score.set(a, sc);
+    if(sc === terms.length) descOnly.add(a);
+    return true;
+  });
+  r.sort(terms.length ? (a,b) => (score.get(b)-score.get(a)) || sorters[st.sort](a,b) : sorters[st.sort]);
   $("count").textContent = `${r.length.toLocaleString()} of ${apps.length.toLocaleString()}`;
   $("status").textContent = (loading ? `Still loading… ${apps.length.toLocaleString()} found so far, order may shift. ` : "") +
     (!r.length && !loading ? "Nothing matches. Try clearing the search or turning off the Made for PT2 filter." : "");
@@ -211,7 +239,7 @@ function render(){
     <div class="card"><a class="cm" href="https://apps.repebble.com/${slug(a.t)}_${a.id}" target="_blank" rel="noopener">
       <img class="ic" loading="lazy" alt="" src="${esc(a.imgs[0]||"")}" data-fb="${esc(a.imgs.slice(1).join(" "))}">
       <div class="tx"><div class="t">${esc(a.t)}</div><div class="a">${esc(a.au)}${a.c?" · "+esc(a.c):""}</div>
-        <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}</div>
+        <div class="m"><b>♥ ${a.h.toLocaleString()}</b><span>new ${ago(a.up)}</span><span>updated ${ago(a.ud)}</span>${a.n?'<span class="nat">Made for PT2</span>':""}${descOnly.has(a)?"<span>matched in description</span>":""}</div>
       </div></a><a class="app" href="pebble://appstore/${a.id}?source=https%3A%2F%2Fappstore-api.repebble.com%2Fapi">Open in Pebble app</a></div>`).join("");
   $("more").hidden = r.length <= shown;
   requestAnimationFrame(fill);
